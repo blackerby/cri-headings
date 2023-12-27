@@ -1,52 +1,34 @@
 use anyhow::{bail, Result};
-use reqwest;
 use scraper::{Html, Selector};
-use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter, Read, Write},
+    path::Path,
+};
 
-const BASE_URL: &str = "https://api.govinfo.gov/packages/CRI-";
-const API_KEY: &str = "psDwdYpzXkhTHjJEGkubYyHy7e5FRgF88E64TrFC";
-
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     // parse arguments
     let args = std::env::args().collect::<Vec<_>>();
     match args.len() {
-        0 | 1 => bail!("Missing <year> and <format>"),
-        2 => bail!("Missing <format>"),
+        0 | 1 => bail!("Missing <file name>"),
         _ => {}
     }
 
-    let year = &args[1];
-    let format = &args[2];
+    let file_name = &args[1];
+    let file = File::open(file_name)?;
+    let mut buf_reader = BufReader::new(file);
+    let mut html = String::new();
+    buf_reader.read_to_string(&mut html)?;
+    let _document = Html::parse_document(&html);
+    let _selector = Selector::parse("p.heading").unwrap();
 
-    let file_name = format!("CRI-{}.txt", year);
-    let file = File::create(file_name)?;
-    let mut buf = BufWriter::new(file);
+    let file_stem = Path::new(file_name).file_name().unwrap();
+    let output_filename = format!("{}_headings.txt", file_stem.to_str().unwrap());
+    let output_file = File::create(output_filename)?;
+    let mut buf_writer = BufWriter::new(output_file);
 
-    let url = format!("{}{}/{}?api_key={}", BASE_URL, year, format, API_KEY);
-    println!("{}", url);
-
-    let response = reqwest::get(url).await?;
-
-    let text = response.text().await?;
-
-    let document = Html::parse_document(&text);
-    let heading_selector = parse_selector("p.heading")?;
-    let headings = document
-        .select(&heading_selector)
-        .map(|heading| heading.inner_html());
-
-    for heading in headings {
-        writeln!(buf, "{}", heading)?;
+    for heading in _document.select(&_selector) {
+        writeln!(&mut buf_writer, "{}", heading.inner_html())?;
     }
-
     Ok(())
-}
-
-fn parse_selector(selector_str: &str) -> Result<Selector, anyhow::Error> {
-    match Selector::parse(selector_str) {
-        Ok(selector) => Ok(selector),
-        Err(_) => bail!("Malformed selector string"),
-    }
 }
