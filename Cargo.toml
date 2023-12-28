@@ -2,9 +2,12 @@
 name = "cri-headings"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = [ "William Blackerby <wmblackerby@gmail.com>" ]
 
 [dependencies]
-anyhow = "1.0.59" 
+anyhow = "1.0.59"
+clap = { version = "4.3.0", features = ["derive"] }
+chrono = "0.4.31"
 scraper = "0.18"
+reqwest = "0.11.23"
+tokio = { version = "1", features = ["full"] }
