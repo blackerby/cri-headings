@@ -1,13 +1,26 @@
-use anyhow::Result;
 use clap::Parser;
 use reqwest;
-use scraper::{Html, Selector};
+use serde::Deserialize;
 use std::{
+    error::Error,
     fs::File,
     io::{BufWriter, Write},
 };
 
 const BASE_URL: &str = "https://api.govinfo.gov/packages/CRI-";
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Page {
+    count: u16,
+    next_page: Option<String>,
+    granules: Vec<Granule>,
+}
+
+#[derive(Deserialize)]
+struct Granule {
+    title: String,
+}
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -17,48 +30,56 @@ pub struct Args {
     #[arg(default_value = "2023")] // how to make this current year?
     years: Vec<String>,
 
-    /// GovInfo API Key
-    #[arg(default_value = "DEMO_KEY")]
-    api_key: String,
+    /// API offset
+    #[arg(default_value = "0")]
+    offset: String,
 
-    /// Data format
-    #[arg(default_value = "htm")]
-    format: String,
+    /// API page size
+    #[arg(default_value = "1000")]
+    page_size: String,
+
+    /// GovInfo API Key
+    #[arg(default_value = "DEMO_KEY", last(true))]
+    api_key: String,
 }
 
 #[tokio::main]
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args) -> Result<(), Box<dyn Error>> {
     for year in args.years {
-        let url = build_url(&year, &args.format, &args.api_key);
-        let mut response = reqwest::get(url).await?;
-        let mut buf = Vec::new();
-
-        while let Some(chunk) = response.chunk().await? {
-            buf.write(&chunk)?;
-        }
-
-        let html = String::from_utf8(buf)?;
-        let document = Html::parse_document(&html);
-        // TODO: do this without `unwrap`
-        let selector = Selector::parse("p.heading").unwrap();
+        let url = build_url(&year, &args.offset, &args.page_size, &args.api_key);
+        let page = reqwest::get(url).await?.json::<Page>().await?;
+        let granules = page.granules;
 
         let output_filename = format!("CRI-{}_headings.txt", &year);
         let output_file = File::create(output_filename)?;
-        let mut buf_writer = BufWriter::new(output_file);
+        let mut buf = BufWriter::new(output_file);
+        let mut count = 0;
+        count += granules.len();
 
-        // write output
-        for p_tag in document.select(&selector) {
-            let raw_heading = p_tag.inner_html();
-            let heading = match raw_heading.find('<') {
-                None => raw_heading,
-                Some(i) => raw_heading[..i].to_owned(),
-            };
-            writeln!(&mut buf_writer, "{}", heading)?;
+        for granule in granules {
+            writeln!(buf, "{}", granule.title)?;
+        }
+        println!("{}/{} headings written", count, page.count);
+
+        let mut next_page = page.next_page;
+        while let Some(base_url) = next_page {
+            let next_url = format!("{}&api_key={}", base_url, args.api_key);
+            let page = reqwest::get(next_url).await?.json::<Page>().await?;
+            let granules = page.granules;
+            count += granules.len();
+            for granule in granules {
+                writeln!(buf, "{}", granule.title)?;
+            }
+            println!("{}/{} headings written", count, page.count);
+            next_page = page.next_page;
         }
     }
     Ok(())
 }
 
-fn build_url(year: &String, format: &String, api_key: &String) -> String {
-    format!("{}{}/{}?api_key={}", BASE_URL, year, format, api_key)
+fn build_url(year: &String, offset: &String, page_size: &String, api_key: &String) -> String {
+    format!(
+        "{}{}/granules?offset={}&pageSize={}&api_key={}",
+        BASE_URL, year, offset, page_size, api_key
+    )
 }
