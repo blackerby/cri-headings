@@ -1,9 +1,9 @@
+use anyhow::{bail, Result};
 use chrono::Datelike;
 use clap::Parser;
-use reqwest;
+use reqwest::{self, Response, StatusCode};
 use serde::Deserialize;
 use std::{
-    error::Error,
     fs::File,
     io::{BufWriter, Write},
 };
@@ -14,6 +14,7 @@ const BASE_URL: &str = "https://api.govinfo.gov/packages/CRI-";
 #[serde(rename_all = "camelCase")]
 struct Page {
     count: u16,
+    page_size: u16,
     next_page: Option<String>,
     granules: Vec<Granule>,
 }
@@ -45,10 +46,22 @@ pub struct Args {
 }
 
 #[tokio::main]
-pub async fn run(args: Args) -> Result<(), Box<dyn Error>> {
-    for year in args.years {
-        let url = build_url(&year, &args.offset, &args.page_size, &args.api_key);
-        let page = reqwest::get(url).await?.json::<Page>().await?;
+pub async fn run(args: Args) -> Result<()> {
+    for year in &args.years {
+        let url = build_url(&year, &args);
+        let response = reqwest::get(url).await?;
+
+        if is_rate_limited(&response) {
+            bail!("Status Code 429: Too many requests. Wait one hour.")
+        }
+
+        let remaining_requests = remaining_requests(&response)?;
+        let page = response.json::<Page>().await?;
+
+        if remaining_requests < requests_to_make(&page) {
+            bail!("Not enough requests remaining to complete task. Wait one hour.")
+        }
+
         let granules = page.granules;
 
         let output_filename = format!("CRI-{}_headings.txt", &year);
@@ -78,13 +91,53 @@ pub async fn run(args: Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn build_url(year: &String, offset: &String, page_size: &String, api_key: &String) -> String {
+fn build_url(year: &String, args: &Args) -> String {
     format!(
         "{}{}/granules?offset={}&pageSize={}&api_key={}",
-        BASE_URL, year, offset, page_size, api_key
+        BASE_URL, year, args.offset, args.page_size, args.api_key
     )
 }
 
 fn current_year() -> String {
     format!("{}", chrono::Utc::now().year())
+}
+
+fn is_rate_limited(response: &Response) -> bool {
+    response.status() == StatusCode::TOO_MANY_REQUESTS
+}
+
+fn remaining_requests(response: &Response) -> Result<u16> {
+    Ok(response
+        .headers()
+        .get("x-ratelimit-remaining")
+        .expect("No matching header found")
+        .to_str()?
+        .parse::<u16>()?)
+}
+
+fn requests_to_make(page: &Page) -> u16 {
+    let quotient = page.count / page.page_size;
+    match page.count % page.page_size {
+        0 => quotient,
+        _ => quotient + 1,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{requests_to_make, Page};
+
+    const PAGE: Page = Page {
+        count: 14853,
+        page_size: 1000,
+        next_page: Some(String::new()),
+        granules: Vec::new(),
+    };
+
+    #[test]
+    fn test_requests_to_make() {
+        let expected = 15;
+        let result = requests_to_make(&PAGE);
+        assert_eq!(expected, result);
+    }
 }
