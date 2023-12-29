@@ -127,17 +127,42 @@ fn requests_to_make(page: &Page) -> u16 {
 mod test {
     use crate::{requests_to_make, Page};
 
-    const PAGE: Page = Page {
-        count: 14853,
-        page_size: 1000,
-        next_page: Some(String::new()),
-        granules: Vec::new(),
-    };
+    #[test]
+    fn test_requests_to_make_1000() {
+        let page = Page {
+            count: 14853,
+            page_size: 1000,
+            next_page: Some(String::new()),
+            granules: Vec::new(),
+        };
+        let expected = 15;
+        let result = requests_to_make(&page);
+        assert_eq!(expected, result);
+    }
 
     #[test]
-    fn test_requests_to_make() {
-        let expected = 15;
-        let result = requests_to_make(&PAGE);
+    fn test_requests_to_make_100() {
+        let page = Page {
+            count: 14853,
+            page_size: 100,
+            next_page: Some(String::new()),
+            granules: Vec::new(),
+        };
+        let expected = 149;
+        let result = requests_to_make(&page);
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_requests_to_make_10() {
+        let page = Page {
+            count: 14853,
+            page_size: 10,
+            next_page: Some(String::new()),
+            granules: Vec::new(),
+        };
+        let expected = 1486;
+        let result = requests_to_make(&page);
         assert_eq!(expected, result);
     }
 }
