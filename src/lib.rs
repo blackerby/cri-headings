@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use chrono::Datelike;
 use clap::Parser;
+use indicatif::ProgressBar;
 use reqwest::{self, Response, StatusCode};
 use serde::Deserialize;
 use std::{
@@ -67,26 +68,25 @@ pub async fn run(args: Args) -> Result<()> {
         let output_filename = format!("CRI-{}_headings.txt", &year);
         let output_file = File::create(output_filename)?;
         let mut buf = BufWriter::new(output_file);
-        let mut count = 0;
-        count += granules.len();
+        let bar = ProgressBar::new(page.count as u64);
 
         for granule in granules {
             writeln!(buf, "{}", granule.title)?;
+            bar.inc(1);
         }
-        println!("{}/{} headings written", count, page.count);
 
         let mut next_page = page.next_page;
         while let Some(base_url) = next_page {
             let next_url = format!("{}&api_key={}", base_url, args.api_key);
             let page = reqwest::get(next_url).await?.json::<Page>().await?;
             let granules = page.granules;
-            count += granules.len();
             for granule in granules {
                 writeln!(buf, "{}", granule.title)?;
+                bar.inc(1);
             }
-            println!("{}/{} headings written", count, page.count);
             next_page = page.next_page;
         }
+        bar.finish();
     }
     Ok(())
 }
