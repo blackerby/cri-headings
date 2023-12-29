@@ -2,7 +2,6 @@ use anyhow::{bail, Result};
 use chrono::Datelike;
 use clap::Parser;
 use futures::future::join_all;
-use indicatif::ProgressBar;
 use reqwest::{self, Response, StatusCode};
 use serde::Deserialize;
 use std::{
@@ -63,6 +62,7 @@ pub async fn run(args: Args) -> Result<()> {
     for (api_key, year, url) in urls {
         let url = url.clone();
         tasks.push(tokio::spawn(async move {
+            println!("Getting {} headings", year);
             let response = reqwest::get(url).await?;
 
             if is_rate_limited(&response) {
@@ -81,11 +81,9 @@ pub async fn run(args: Args) -> Result<()> {
             let output_filename = format!("CRI-{}_headings.txt", year);
             let output_file = File::create(output_filename)?;
             let mut buf = BufWriter::new(output_file);
-            let bar = ProgressBar::new(page.count as u64);
 
             for granule in granules {
                 writeln!(buf, "{}", granule.title)?;
-                bar.inc(1);
             }
 
             let mut next_page = page.next_page;
@@ -95,11 +93,10 @@ pub async fn run(args: Args) -> Result<()> {
                 let granules = page.granules;
                 for granule in granules {
                     writeln!(buf, "{}", granule.title)?;
-                    bar.inc(1);
                 }
                 next_page = page.next_page;
             }
-            bar.finish();
+            println!("Wrote {} headings", year);
             Ok(())
         }))
     }
