@@ -1,3 +1,4 @@
+use chrono::Datelike;
 use clap::Parser;
 use reqwest;
 use serde::Deserialize;
@@ -27,7 +28,7 @@ struct Granule {
 /// Get Congressional Record Index headings from the GovInfo API
 pub struct Args {
     /// CRI years to download. Default to current year.
-    #[arg(default_value = "2023")] // how to make this current year?
+    #[arg(default_values_t = [current_year()])]
     years: Vec<String>,
 
     /// API offset
@@ -82,4 +83,8 @@ fn build_url(year: &String, offset: &String, page_size: &String, api_key: &Strin
         "{}{}/granules?offset={}&pageSize={}&api_key={}",
         BASE_URL, year, offset, page_size, api_key
     )
+}
+
+fn current_year() -> String {
+    format!("{}", chrono::Utc::now().year())
 }
