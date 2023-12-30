@@ -1,13 +1,15 @@
 use anyhow::{bail, Result};
 use chrono::Datelike;
 use clap::Parser;
-use indicatif::ProgressBar;
+use futures::future::join_all;
+use indicatif::{MultiProgress, ProgressBar};
 use reqwest::{self, Response, StatusCode};
 use serde::Deserialize;
 use std::{
     fs::File,
     io::{BufWriter, Write},
 };
+use tokio::task::JoinHandle;
 
 const BASE_URL: &str = "https://api.govinfo.gov/packages/CRI-";
 
@@ -48,53 +50,80 @@ pub struct Args {
 
 #[tokio::main]
 pub async fn run(args: Args) -> Result<()> {
-    for year in &args.years {
-        let url = build_url(&year, &args);
-        let response = reqwest::get(url).await?;
+    let years = &args.years;
+    let api_key = &args.api_key;
+    let offset = &args.offset;
+    let page_size = &args.page_size;
+    let urls = years
+        .iter()
+        .map(|year| build_url(year, offset, page_size, api_key))
+        .collect::<Vec<(String, String, String)>>();
+    let mut tasks: Vec<JoinHandle<Result<()>>> = Vec::new();
+    let mp = MultiProgress::new();
 
-        if is_rate_limited(&response) {
-            bail!("Status Code 429: Too many requests. Wait one hour.")
-        }
+    for (api_key, year, url) in urls {
+        let url = url.clone();
+        let mp_clone = mp.clone();
+        tasks.push(tokio::spawn(async move {
+            let response = reqwest::get(url).await?;
 
-        let remaining_requests = remaining_requests(&response)?;
-        let page = response.json::<Page>().await?;
+            if is_rate_limited(&response) {
+                bail!("Status Code 429: Too many requests. Wait one hour.")
+            }
 
-        if remaining_requests < requests_to_make(&page) {
-            bail!("Not enough requests remaining to complete task. Wait one hour.")
-        }
+            let remaining_requests = remaining_requests(&response)?;
+            let page = response.json::<Page>().await?;
 
-        let granules = page.granules;
+            if remaining_requests < requests_to_make(&page) {
+                bail!("Not enough requests remaining to complete task. Wait one hour.")
+            }
 
-        let output_filename = format!("CRI-{}_headings.txt", &year);
-        let output_file = File::create(output_filename)?;
-        let mut buf = BufWriter::new(output_file);
-        let bar = ProgressBar::new(page.count as u64);
-
-        for granule in granules {
-            writeln!(buf, "{}", granule.title)?;
-            bar.inc(1);
-        }
-
-        let mut next_page = page.next_page;
-        while let Some(base_url) = next_page {
-            let next_url = format!("{}&api_key={}", base_url, args.api_key);
-            let page = reqwest::get(next_url).await?.json::<Page>().await?;
             let granules = page.granules;
+
+            let output_filename = format!("CRI-{}_headings.txt", year);
+            let output_file = File::create(output_filename)?;
+            let mut buf = BufWriter::new(output_file);
+            let bar = ProgressBar::new(page.count as u64);
+            let pb = mp_clone.add(bar);
+
             for granule in granules {
                 writeln!(buf, "{}", granule.title)?;
-                bar.inc(1);
+                pb.inc(1);
             }
-            next_page = page.next_page;
-        }
-        bar.finish();
+
+            let mut next_page = page.next_page;
+            while let Some(base_url) = next_page {
+                let next_url = format!("{}&api_key={}", base_url, api_key);
+                let page = reqwest::get(next_url).await?.json::<Page>().await?;
+                let granules = page.granules;
+                for granule in granules {
+                    writeln!(buf, "{}", granule.title)?;
+                    pb.inc(1);
+                }
+                next_page = page.next_page;
+            }
+            pb.finish();
+            Ok(())
+        }))
     }
+    join_all(tasks).await;
+
     Ok(())
 }
 
-fn build_url(year: &String, args: &Args) -> String {
-    format!(
-        "{}{}/granules?offset={}&pageSize={}&api_key={}",
-        BASE_URL, year, args.offset, args.page_size, args.api_key
+fn build_url(
+    year: &String,
+    offset: &String,
+    page_size: &String,
+    api_key: &String,
+) -> (String, String, String) {
+    (
+        api_key.to_string(),
+        year.to_string(),
+        format!(
+            "{}{}/granules?offset={}&pageSize={}&api_key={}",
+            BASE_URL, year, offset, page_size, api_key
+        ),
     )
 }
 
