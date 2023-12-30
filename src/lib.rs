@@ -42,16 +42,19 @@ pub async fn run(args: Args) -> Result<()> {
     let api_key = &args.api_key;
     let offset = &args.offset;
     let page_size = &args.page_size;
+
     let urls = years
         .iter()
         .map(|year| build_url(year, offset, page_size, api_key))
         .collect::<Vec<(String, String, String)>>();
+
     let mut tasks: Vec<JoinHandle<Result<()>>> = Vec::new();
     let mp = MultiProgress::new();
 
     for (api_key, year, url) in urls {
         let url = url.clone();
         let mp_clone = mp.clone();
+
         tasks.push(tokio::spawn(async move {
             let response = reqwest::get(url).await?;
 
@@ -66,15 +69,13 @@ pub async fn run(args: Args) -> Result<()> {
                 bail!("Not enough requests remaining to complete task. Wait one hour.")
             }
 
-            let granules = page.granules;
-
             let output_filename = format!("CRI-{}_headings.txt", year);
             let output_file = File::create(output_filename)?;
             let mut buf = BufWriter::new(output_file);
             let bar = ProgressBar::new(page.count as u64);
             let pb = mp_clone.add(bar);
 
-            for granule in granules {
+            for granule in page.granules {
                 writeln!(buf, "{}", granule.title)?;
                 pb.inc(1);
             }
@@ -83,17 +84,19 @@ pub async fn run(args: Args) -> Result<()> {
             while let Some(base_url) = next_page {
                 let next_url = format!("{}&api_key={}", base_url, api_key);
                 let page = reqwest::get(next_url).await?.json::<Page>().await?;
-                let granules = page.granules;
-                for granule in granules {
+                for granule in page.granules {
                     writeln!(buf, "{}", granule.title)?;
                     pb.inc(1);
                 }
                 next_page = page.next_page;
             }
+
             pb.finish();
+
             Ok(())
         }))
     }
+
     join_all(tasks).await;
 
     Ok(())
