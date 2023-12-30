@@ -1,31 +1,19 @@
+mod api;
+mod constants;
+mod utils;
+
+use crate::api::Page;
+use crate::utils::*;
 use anyhow::{bail, Result};
-use chrono::Datelike;
 use clap::Parser;
 use futures::future::join_all;
 use indicatif::{MultiProgress, ProgressBar};
-use reqwest::{self, Response, StatusCode};
-use serde::Deserialize;
+use reqwest;
 use std::{
     fs::File,
     io::{BufWriter, Write},
 };
 use tokio::task::JoinHandle;
-
-const BASE_URL: &str = "https://api.govinfo.gov/packages/CRI-";
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Page {
-    count: u16,
-    page_size: u16,
-    next_page: Option<String>,
-    granules: Vec<Granule>,
-}
-
-#[derive(Deserialize)]
-struct Granule {
-    title: String,
-}
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -109,89 +97,4 @@ pub async fn run(args: Args) -> Result<()> {
     join_all(tasks).await;
 
     Ok(())
-}
-
-fn build_url(
-    year: &String,
-    offset: &String,
-    page_size: &String,
-    api_key: &String,
-) -> (String, String, String) {
-    (
-        api_key.to_string(),
-        year.to_string(),
-        format!(
-            "{}{}/granules?offset={}&pageSize={}&api_key={}",
-            BASE_URL, year, offset, page_size, api_key
-        ),
-    )
-}
-
-fn current_year() -> String {
-    format!("{}", chrono::Utc::now().year())
-}
-
-fn is_rate_limited(response: &Response) -> bool {
-    response.status() == StatusCode::TOO_MANY_REQUESTS
-}
-
-fn remaining_requests(response: &Response) -> Result<u16> {
-    Ok(response
-        .headers()
-        .get("x-ratelimit-remaining")
-        .expect("No matching header found")
-        .to_str()?
-        .parse::<u16>()?)
-}
-
-fn requests_to_make(page: &Page) -> u16 {
-    let quotient = page.count / page.page_size;
-    match page.count % page.page_size {
-        0 => quotient,
-        _ => quotient + 1,
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::{requests_to_make, Page};
-
-    #[test]
-    fn test_requests_to_make_1000() {
-        let page = Page {
-            count: 14853,
-            page_size: 1000,
-            next_page: Some(String::new()),
-            granules: Vec::new(),
-        };
-        let expected = 15;
-        let result = requests_to_make(&page);
-        assert_eq!(expected, result);
-    }
-
-    #[test]
-    fn test_requests_to_make_100() {
-        let page = Page {
-            count: 14853,
-            page_size: 100,
-            next_page: Some(String::new()),
-            granules: Vec::new(),
-        };
-        let expected = 149;
-        let result = requests_to_make(&page);
-        assert_eq!(expected, result);
-    }
-
-    #[test]
-    fn test_requests_to_make_10() {
-        let page = Page {
-            count: 14853,
-            page_size: 10,
-            next_page: Some(String::new()),
-            granules: Vec::new(),
-        };
-        let expected = 1486;
-        let result = requests_to_make(&page);
-        assert_eq!(expected, result);
-    }
 }
