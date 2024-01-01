@@ -75,7 +75,6 @@ pub async fn run(args: Args) -> Result<()> {
 
             if page.count > 0 {
                 let output_filename = format!("{}/CRI-{}_headings.txt", output_dir, year);
-                println!("{}", output_filename);
                 let output_file = File::create(output_filename)?;
                 let mut buf = BufWriter::new(output_file);
                 let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
