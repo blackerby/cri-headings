@@ -1,8 +1,8 @@
 use crate::api::Page;
 use crate::constants::BASE_URL;
 use anyhow::Result;
-use chrono::Datelike;
 use reqwest::{self, Response, StatusCode};
+use time::OffsetDateTime;
 
 pub fn build_url(year: &String, page_size: &String, api_key: &String) -> (String, String, String) {
     (
@@ -16,7 +16,7 @@ pub fn build_url(year: &String, page_size: &String, api_key: &String) -> (String
 }
 
 pub fn current_year() -> String {
-    format!("{}", chrono::Utc::now().year())
+    format!("{}", OffsetDateTime::now_utc().year())
 }
 
 pub fn is_rate_limited(response: &Response) -> bool {
@@ -42,7 +42,7 @@ pub fn requests_to_make(page: &Page) -> u16 {
 
 #[cfg(test)]
 mod test {
-    use crate::utils::{requests_to_make, Page};
+    use crate::utils::{current_year, requests_to_make, Page};
 
     #[test]
     pub fn test_requests_to_make_1000() {
@@ -81,5 +81,12 @@ mod test {
         let expected = 1486;
         let result = requests_to_make(&page);
         assert_eq!(expected, result);
+    }
+
+    #[test]
+    pub fn test_current_year() {
+        let expected = String::from("2024");
+        let result = current_year();
+        assert_eq!(expected, result)
     }
 }
