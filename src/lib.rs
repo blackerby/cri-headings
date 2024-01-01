@@ -64,30 +64,33 @@ pub async fn run(args: Args) -> Result<()> {
                 bail!("Not enough requests remaining to complete task. Wait one hour.")
             }
 
-            let output_filename = format!("CRI-{}_headings.txt", year);
-            let output_file = File::create(output_filename)?;
-            let mut buf = BufWriter::new(output_file);
-            let bar = ProgressBar::new(page.count as u64);
-            let pb = mp_clone.add(bar);
+            if page.count > 0 {
+                let output_filename = format!("CRI-{}_headings.txt", year);
+                let output_file = File::create(output_filename)?;
+                let mut buf = BufWriter::new(output_file);
+                let bar = ProgressBar::new(page.count as u64);
+                let pb = mp_clone.add(bar);
 
-            for granule in page.granules {
-                writeln!(buf, "{}", granule.title)?;
-                pb.inc(1);
-            }
-
-            let mut next_page = page.next_page;
-            while let Some(base_url) = next_page {
-                let next_url = format!("{}&api_key={}", base_url, api_key);
-                let page = reqwest::get(next_url).await?.json::<Page>().await?;
                 for granule in page.granules {
                     writeln!(buf, "{}", granule.title)?;
                     pb.inc(1);
                 }
-                next_page = page.next_page;
-            }
 
-            buf.flush()?;
-            pb.finish();
+                let mut next_page = page.next_page;
+                while let Some(base_url) = next_page {
+                    let next_url = format!("{}&api_key={}", base_url, api_key);
+                    let page = reqwest::get(next_url).await?.json::<Page>().await?;
+                    for granule in page.granules {
+                        writeln!(buf, "{}", granule.title)?;
+                        pb.inc(1);
+                    }
+                    next_page = page.next_page;
+                }
+                buf.flush()?;
+                pb.finish();
+            } else {
+                println!("No CRI entries for {}", year);
+            }
             Ok(())
         }))
     }
