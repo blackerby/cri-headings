@@ -99,7 +99,7 @@ pub async fn run(args: Args) -> Result<()> {
                     next_page = page.next_page;
                 }
                 buf.flush()?;
-                pb.finish();
+                pb.finish_and_clear();
             } else {
                 println!("No CRI entries for {}", year);
             }
