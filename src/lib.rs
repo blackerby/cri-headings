@@ -69,7 +69,9 @@ pub async fn run(args: Args) -> Result<()> {
                 let output_file = File::create(output_filename)?;
                 let mut buf = BufWriter::new(output_file);
                 let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
-                bar.set_style(ProgressStyle::with_template("{bar} {msg}")?);
+                bar.set_style(ProgressStyle::with_template(
+                    "{wide_bar} {msg} ({pos}/{len} headings)",
+                )?);
                 let pb = mp_clone.add(bar);
 
                 for granule in page.granules {
