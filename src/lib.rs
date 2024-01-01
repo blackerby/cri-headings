@@ -23,10 +23,6 @@ pub struct Args {
     #[arg(default_values_t = [current_year()])]
     years: Vec<String>,
 
-    /// API offset
-    #[arg(default_value = "0")]
-    offset: String,
-
     /// API page size
     #[arg(default_value = "1000")]
     page_size: String,
@@ -40,12 +36,11 @@ pub struct Args {
 pub async fn run(args: Args) -> Result<()> {
     let years = &args.years;
     let api_key = &args.api_key;
-    let offset = &args.offset;
     let page_size = &args.page_size;
 
     let urls = years
         .iter()
-        .map(|year| build_url(year, offset, page_size, api_key))
+        .map(|year| build_url(year, page_size, api_key))
         .collect::<Vec<(String, String, String)>>();
 
     let mut tasks: Vec<JoinHandle<Result<()>>> = Vec::new();
