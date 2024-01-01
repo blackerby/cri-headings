@@ -25,10 +25,17 @@ pub struct Args {
 
     /// API page size
     #[arg(default_value = "1000")]
+    #[arg(long)]
     page_size: String,
 
+    /// Output directory
+    #[arg(default_value = ".")]
+    #[arg(long)]
+    output_dir: String,
+
     /// GovInfo API Key
-    #[arg(default_value = "DEMO_KEY", last(true))]
+    #[arg(default_value = "DEMO_KEY")]
+    #[arg(long)]
     api_key: String,
 }
 
@@ -37,16 +44,17 @@ pub async fn run(args: Args) -> Result<()> {
     let years = &args.years;
     let api_key = &args.api_key;
     let page_size = &args.page_size;
+    let output_dir = &args.output_dir;
 
     let urls = years
         .iter()
-        .map(|year| build_url(year, page_size, api_key))
-        .collect::<Vec<(String, String, String)>>();
+        .map(|year| build_url(output_dir, year, page_size, api_key))
+        .collect::<Vec<(String, String, String, String)>>();
 
     let mut tasks: Vec<JoinHandle<Result<()>>> = Vec::new();
     let mp = MultiProgress::new();
 
-    for (api_key, year, url) in urls {
+    for (output_dir, api_key, year, url) in urls {
         let url = url.clone();
         let mp_clone = mp.clone();
 
@@ -65,7 +73,7 @@ pub async fn run(args: Args) -> Result<()> {
             }
 
             if page.count > 0 {
-                let output_filename = format!("CRI-{}_headings.txt", year);
+                let output_filename = format!("{}/CRI-{}_headings.txt", output_dir, year);
                 let output_file = File::create(output_filename)?;
                 let mut buf = BufWriter::new(output_file);
                 let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
