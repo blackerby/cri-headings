@@ -4,18 +4,13 @@ use anyhow::Result;
 use chrono::Datelike;
 use reqwest::{self, Response, StatusCode};
 
-pub fn build_url(
-    year: &String,
-    offset: &String,
-    page_size: &String,
-    api_key: &String,
-) -> (String, String, String) {
+pub fn build_url(year: &String, page_size: &String, api_key: &String) -> (String, String, String) {
     (
         api_key.to_string(),
         year.to_string(),
         format!(
-            "{}{}/granules?offset={}&pageSize={}&api_key={}",
-            BASE_URL, year, offset, page_size, api_key
+            "{}{}/granules?offsetMark=*&pageSize={}&api_key={}",
+            BASE_URL, year, page_size, api_key
         ),
     )
 }

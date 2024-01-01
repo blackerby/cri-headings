@@ -1,5 +1,6 @@
 /target
 *.txt
 *.html
+*.json
 *.zip
 CRI-*/
