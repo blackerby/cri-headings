@@ -4,8 +4,14 @@ use anyhow::Result;
 use reqwest::{self, Response, StatusCode};
 use time::OffsetDateTime;
 
-pub fn build_url(year: &String, page_size: &String, api_key: &String) -> (String, String, String) {
+pub fn build_url(
+    output_dir: &String,
+    year: &String,
+    page_size: &String,
+    api_key: &String,
+) -> (String, String, String, String) {
     (
+        output_dir.to_string(),
         api_key.to_string(),
         year.to_string(),
         format!(
