@@ -7,7 +7,7 @@ use crate::utils::*;
 use anyhow::{bail, Result};
 use clap::Parser;
 use futures::future::join_all;
-use indicatif::{MultiProgress, ProgressBar};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use reqwest;
 use std::{
     fs::File,
@@ -68,7 +68,8 @@ pub async fn run(args: Args) -> Result<()> {
                 let output_filename = format!("CRI-{}_headings.txt", year);
                 let output_file = File::create(output_filename)?;
                 let mut buf = BufWriter::new(output_file);
-                let bar = ProgressBar::new(page.count as u64);
+                let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
+                bar.set_style(ProgressStyle::with_template("{bar} {msg}")?);
                 let pb = mp_clone.add(bar);
 
                 for granule in page.granules {
