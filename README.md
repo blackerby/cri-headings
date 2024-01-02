@@ -7,7 +7,7 @@ A command line tool for downloading Congressional Record Index headings from the
 - Clone and compile the source
 
 ## Usage
-```zsh
+```bash
 $ cri-headings --help
 Get Congressional Record Index headings from the GovInfo API
 
