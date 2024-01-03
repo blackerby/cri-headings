@@ -1,4 +1,4 @@
-use crate::utils::current_year;
+use crate::current_year;
 use clap::Parser;
 
 #[derive(Debug, Parser)]
