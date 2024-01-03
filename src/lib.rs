@@ -2,8 +2,6 @@ mod api;
 pub mod args;
 mod constants;
 
-use std::sync::Arc;
-
 use crate::api::Page;
 use crate::args::Args;
 use crate::constants::BASE_URL;
@@ -15,6 +13,7 @@ use reqwest::{blocking::Response as BlockingResponse, Response, StatusCode};
 use std::{
     fs::File,
     io::{BufWriter, Write},
+    sync::Arc,
 };
 use time::OffsetDateTime;
 use tokio::task::JoinHandle;
