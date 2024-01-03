@@ -23,4 +23,8 @@ pub struct Args {
     #[arg(default_value = "DEMO_KEY")]
     #[arg(long)]
     pub api_key: String,
+
+    /// Write CSV
+    #[arg(short('c'), long("csv"))]
+    pub csv: bool,
 }
