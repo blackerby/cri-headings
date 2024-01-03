@@ -5,3 +5,4 @@
 *.zip
 CRI-*/
 *.csv
+.DS_Store
