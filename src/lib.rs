@@ -1,11 +1,12 @@
 mod api;
+pub mod args;
 mod constants;
 mod utils;
 
 use crate::api::Page;
+use crate::args::Args;
 use crate::utils::*;
 use anyhow::{bail, Result};
-use clap::Parser;
 use futures::future::join_all;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use reqwest;
@@ -14,30 +15,6 @@ use std::{
     io::{BufWriter, Write},
 };
 use tokio::task::JoinHandle;
-
-#[derive(Debug, Parser)]
-#[command(author, version, about)]
-/// Get Congressional Record Index headings from the GovInfo API
-pub struct Args {
-    /// CRI years to download. Default to current year.
-    #[arg(default_values_t = [current_year()])]
-    years: Vec<String>,
-
-    /// API page size
-    #[arg(default_value = "1000")]
-    #[arg(long)]
-    page_size: String,
-
-    /// Output directory
-    #[arg(default_value = ".")]
-    #[arg(long)]
-    output_dir: String,
-
-    /// GovInfo API Key
-    #[arg(default_value = "DEMO_KEY")]
-    #[arg(long)]
-    api_key: String,
-}
 
 #[tokio::main]
 pub async fn run(args: Args) -> Result<()> {

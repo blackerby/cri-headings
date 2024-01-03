@@ -1,5 +1,5 @@
 use clap::Parser;
-use cri_headings::{run, Args};
+use cri_headings::{args::Args, run};
 
 fn main() {
     let args = Args::parse();
