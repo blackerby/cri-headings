@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use cri_headings::args::Args;
-use cri_headings::*;
+use cri_headings::{async_run, blocking_run};
 use std::fs;
 use std::sync::Arc;
 
