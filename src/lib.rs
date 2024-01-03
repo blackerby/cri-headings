@@ -65,6 +65,97 @@ pub fn requests_to_make(page: &Page) -> u16 {
     }
 }
 
+fn create_output_file(args: Arc<Args>, year: &String) -> Result<File> {
+    let output_filename = if args.csv {
+        format!("{}/CRI-{}_headings.csv", args.output_dir, year)
+    } else {
+        format!("{}/CRI-{}_headings.txt", args.output_dir, year)
+    };
+    Ok(File::create(output_filename)?)
+}
+
+fn create_progress_bar(year: &String, page_count: u16) -> Result<ProgressBar> {
+    let bar = ProgressBar::new(page_count as u64).with_message(format!("CRI-{}", year));
+    bar.set_style(ProgressStyle::with_template(
+        "{wide_bar} {msg} ({pos}/{len} headings)",
+    )?);
+    Ok(bar)
+}
+
+fn process_csv(
+    args: Arc<Args>,
+    output_file: File,
+    year: String,
+    page: Page,
+    multi_progress: Option<MultiProgress>,
+) -> Result<()> {
+    let mut wtr = csv::Writer::from_writer(output_file);
+    let new_bar = create_progress_bar(&year, page.count)?;
+    let bar = if let Some(mp) = multi_progress {
+        mp.add(new_bar)
+    } else {
+        new_bar
+    };
+    for granule in page.granules {
+        let heading = Heading {
+            title: granule.title,
+            year: year.clone(),
+        };
+        wtr.serialize(heading)?;
+        bar.inc(1);
+    }
+    let mut next_page = page.next_page;
+    while let Some(base_url) = next_page {
+        let next_url = format!("{}&api_key={}", base_url, args.api_key);
+        let page = reqwest::blocking::get(next_url)?.json::<Page>()?;
+        for granule in page.granules {
+            let heading = Heading {
+                title: granule.title,
+                year: year.clone(),
+            };
+            wtr.serialize(heading)?;
+            bar.inc(1);
+        }
+        next_page = page.next_page;
+    }
+    wtr.flush()?;
+    bar.finish_and_clear();
+    Ok(())
+}
+
+fn process_txt(
+    args: Arc<Args>,
+    output_file: File,
+    year: String,
+    page: Page,
+    multi_progress: Option<MultiProgress>,
+) -> Result<()> {
+    let mut buf = BufWriter::new(output_file);
+    let new_bar = create_progress_bar(&year, page.count)?;
+    let bar = if let Some(mp) = multi_progress {
+        mp.add(new_bar)
+    } else {
+        new_bar
+    };
+    for granule in page.granules {
+        writeln!(buf, "{}", granule.title)?;
+        bar.inc(1);
+    }
+    let mut next_page = page.next_page;
+    while let Some(base_url) = next_page {
+        let next_url = format!("{}&api_key={}", base_url, args.api_key);
+        let page = reqwest::blocking::get(next_url)?.json::<Page>()?;
+        for granule in page.granules {
+            writeln!(buf, "{}", granule.title)?;
+            bar.inc(1);
+        }
+        next_page = page.next_page;
+    }
+    buf.flush()?;
+    bar.finish_and_clear();
+    Ok(())
+}
+
 pub fn blocking_run(args: Arc<Args>) -> Result<()> {
     let (year, url) = build_url(&args.years[0], args.clone());
     let response = reqwest::blocking::get(url)?;
@@ -81,64 +172,11 @@ pub fn blocking_run(args: Arc<Args>) -> Result<()> {
     }
 
     if page.count > 0 {
-        let output_filename = if args.csv {
-            format!("{}/CRI-{}_headings.csv", args.output_dir, year)
-        } else {
-            format!("{}/CRI-{}_headings.txt", args.output_dir, year)
-        };
-        let output_file = File::create(output_filename)?;
+        let output_file = create_output_file(args.clone(), &year)?;
         if args.csv {
-            let mut wtr = csv::Writer::from_writer(output_file);
-            let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
-            bar.set_style(ProgressStyle::with_template(
-                "{wide_bar} {msg} ({pos}/{len} headings)",
-            )?);
-            for granule in page.granules {
-                let heading = Heading {
-                    title: granule.title,
-                    year: year.clone(),
-                };
-                wtr.serialize(heading)?;
-                bar.inc(1);
-            }
-            let mut next_page = page.next_page;
-            while let Some(base_url) = next_page {
-                let next_url = format!("{}&api_key={}", base_url, args.api_key);
-                let page = reqwest::blocking::get(next_url)?.json::<Page>()?;
-                for granule in page.granules {
-                    let heading = Heading {
-                        title: granule.title,
-                        year: year.clone(),
-                    };
-                    wtr.serialize(heading)?;
-                    bar.inc(1);
-                }
-                next_page = page.next_page;
-            }
-            wtr.flush()?;
-            bar.finish_and_clear();
+            process_csv(args, output_file, year, page, None)?;
         } else {
-            let mut buf = BufWriter::new(output_file);
-            let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
-            bar.set_style(ProgressStyle::with_template(
-                "{wide_bar} {msg} ({pos}/{len} headings)",
-            )?);
-            for granule in page.granules {
-                writeln!(buf, "{}", granule.title)?;
-                bar.inc(1);
-            }
-            let mut next_page = page.next_page;
-            while let Some(base_url) = next_page {
-                let next_url = format!("{}&api_key={}", base_url, args.api_key);
-                let page = reqwest::blocking::get(next_url)?.json::<Page>()?;
-                for granule in page.granules {
-                    writeln!(buf, "{}", granule.title)?;
-                    bar.inc(1);
-                }
-                next_page = page.next_page;
-            }
-            buf.flush()?;
-            bar.finish_and_clear();
+            process_txt(args, output_file, year, page, None)?;
         }
     } else {
         println!("No CRI entries for {}", year);
@@ -176,36 +214,16 @@ pub async fn async_run(args: Arc<Args>) -> Result<()> {
             }
 
             if page.count > 0 {
-                // match args.csv ...
-                let output_filename = format!("{}/CRI-{}_headings.txt", args.output_dir, year);
-                let output_file = File::create(output_filename)?;
-                let mut buf = BufWriter::new(output_file);
-                let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
-                bar.set_style(ProgressStyle::with_template(
-                    "{wide_bar} {msg} ({pos}/{len} headings)",
-                )?);
-                let pb = mp_clone.add(bar);
-
-                for granule in page.granules {
-                    writeln!(buf, "{}", granule.title)?;
-                    pb.inc(1);
+                let output_file = create_output_file(args.clone(), &year)?;
+                if args.csv {
+                    process_csv(args, output_file, year, page, Some(mp_clone))?;
+                } else {
+                    process_txt(args, output_file, year, page, Some(mp_clone))?;
                 }
-
-                let mut next_page = page.next_page;
-                while let Some(base_url) = next_page {
-                    let next_url = format!("{}&api_key={}", base_url, args.api_key);
-                    let page = reqwest::get(next_url).await?.json::<Page>().await?;
-                    for granule in page.granules {
-                        writeln!(buf, "{}", granule.title)?;
-                        pb.inc(1);
-                    }
-                    next_page = page.next_page;
-                }
-                buf.flush()?;
-                pb.finish_and_clear();
             } else {
                 println!("No CRI entries for {}", year);
             }
+
             Ok(())
         }))
     }
