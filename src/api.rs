@@ -17,5 +17,5 @@ pub struct Granule {
 #[derive(Serialize)]
 pub struct Heading {
     pub title: String,
-    pub year: usize,
+    pub year: String,
 }

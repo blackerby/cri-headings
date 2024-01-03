@@ -2,7 +2,7 @@ mod api;
 pub mod args;
 mod constants;
 
-use crate::api::Page;
+use crate::api::{Heading, Page};
 use crate::args::Args;
 use crate::constants::BASE_URL;
 use anyhow::{bail, Result};
@@ -81,31 +81,65 @@ pub fn blocking_run(args: Arc<Args>) -> Result<()> {
     }
 
     if page.count > 0 {
-        let output_filename = format!("{}/CRI-{}_headings.txt", args.output_dir, year);
+        let output_filename = if args.csv {
+            format!("{}/CRI-{}_headings.csv", args.output_dir, year)
+        } else {
+            format!("{}/CRI-{}_headings.txt", args.output_dir, year)
+        };
         let output_file = File::create(output_filename)?;
-        let mut buf = BufWriter::new(output_file);
-        let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
-        bar.set_style(ProgressStyle::with_template(
-            "{wide_bar} {msg} ({pos}/{len} headings)",
-        )?);
-
-        for granule in page.granules {
-            writeln!(buf, "{}", granule.title)?;
-            bar.inc(1);
-        }
-
-        let mut next_page = page.next_page;
-        while let Some(base_url) = next_page {
-            let next_url = format!("{}&api_key={}", base_url, args.api_key);
-            let page = reqwest::blocking::get(next_url)?.json::<Page>()?;
+        if args.csv {
+            let mut wtr = csv::Writer::from_writer(output_file);
+            let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
+            bar.set_style(ProgressStyle::with_template(
+                "{wide_bar} {msg} ({pos}/{len} headings)",
+            )?);
+            for granule in page.granules {
+                let heading = Heading {
+                    title: granule.title,
+                    year: year.clone(),
+                };
+                wtr.serialize(heading)?;
+                bar.inc(1);
+            }
+            let mut next_page = page.next_page;
+            while let Some(base_url) = next_page {
+                let next_url = format!("{}&api_key={}", base_url, args.api_key);
+                let page = reqwest::blocking::get(next_url)?.json::<Page>()?;
+                for granule in page.granules {
+                    let heading = Heading {
+                        title: granule.title,
+                        year: year.clone(),
+                    };
+                    wtr.serialize(heading)?;
+                    bar.inc(1);
+                }
+                next_page = page.next_page;
+            }
+            wtr.flush()?;
+            bar.finish_and_clear();
+        } else {
+            let mut buf = BufWriter::new(output_file);
+            let bar = ProgressBar::new(page.count as u64).with_message(format!("CRI-{}", year));
+            bar.set_style(ProgressStyle::with_template(
+                "{wide_bar} {msg} ({pos}/{len} headings)",
+            )?);
             for granule in page.granules {
                 writeln!(buf, "{}", granule.title)?;
                 bar.inc(1);
             }
-            next_page = page.next_page;
+            let mut next_page = page.next_page;
+            while let Some(base_url) = next_page {
+                let next_url = format!("{}&api_key={}", base_url, args.api_key);
+                let page = reqwest::blocking::get(next_url)?.json::<Page>()?;
+                for granule in page.granules {
+                    writeln!(buf, "{}", granule.title)?;
+                    bar.inc(1);
+                }
+                next_page = page.next_page;
+            }
+            buf.flush()?;
+            bar.finish_and_clear();
         }
-        buf.flush()?;
-        bar.finish_and_clear();
     } else {
         println!("No CRI entries for {}", year);
     }
@@ -142,6 +176,7 @@ pub async fn async_run(args: Arc<Args>) -> Result<()> {
             }
 
             if page.count > 0 {
+                // match args.csv ...
                 let output_filename = format!("{}/CRI-{}_headings.txt", args.output_dir, year);
                 let output_file = File::create(output_filename)?;
                 let mut buf = BufWriter::new(output_file);
