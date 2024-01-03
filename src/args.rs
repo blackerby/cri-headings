@@ -1,4 +1,4 @@
-use crate::utils::current_year;
+use crate::current_year;
 use clap::Parser;
 
 #[derive(Debug, Parser)]
@@ -23,4 +23,8 @@ pub struct Args {
     #[arg(default_value = "DEMO_KEY")]
     #[arg(long)]
     pub api_key: String,
+
+    /// Write CSV
+    #[arg(short('c'), long("csv"))]
+    pub csv: bool,
 }
