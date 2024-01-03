@@ -8,7 +8,6 @@ use crate::constants::BASE_URL;
 use anyhow::{bail, Result};
 use futures::future::join_all;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use reqwest;
 use reqwest::{blocking::Response as BlockingResponse, Response, StatusCode};
 use std::{
     fs::File,
