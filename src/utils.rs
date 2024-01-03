@@ -1,22 +1,18 @@
+use std::sync::Arc;
+
 use crate::api::Page;
 use crate::constants::BASE_URL;
+use crate::Args;
 use anyhow::Result;
-use reqwest::{self, Response, StatusCode};
+use reqwest::{self, blocking::Response as BlockingResponse, Response, StatusCode};
 use time::OffsetDateTime;
 
-pub fn build_url(
-    output_dir: &String,
-    year: &String,
-    page_size: &String,
-    api_key: &String,
-) -> (String, String, String, String) {
+pub fn build_url(year: &String, args: Arc<Args>) -> (String, String) {
     (
-        output_dir.to_string(),
-        api_key.to_string(),
         year.to_string(),
         format!(
             "{}{}/granules?offsetMark=*&pageSize={}&api_key={}",
-            BASE_URL, year, page_size, api_key
+            BASE_URL, year, args.page_size, args.api_key
         ),
     )
 }
@@ -29,7 +25,20 @@ pub fn is_rate_limited(response: &Response) -> bool {
     response.status() == StatusCode::TOO_MANY_REQUESTS
 }
 
+pub fn is_rate_limited_blocking(response: &BlockingResponse) -> bool {
+    response.status() == StatusCode::TOO_MANY_REQUESTS
+}
+
 pub fn remaining_requests(response: &Response) -> Result<u16> {
+    Ok(response
+        .headers()
+        .get("x-ratelimit-remaining")
+        .expect("No matching header found")
+        .to_str()?
+        .parse::<u16>()?)
+}
+
+pub fn remaining_requests_blocking(response: &BlockingResponse) -> Result<u16> {
     Ok(response
         .headers()
         .get("x-ratelimit-remaining")
