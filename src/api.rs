@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,4 +12,10 @@ pub struct Page {
 #[derive(Deserialize)]
 pub struct Granule {
     pub title: String,
+}
+
+#[derive(Serialize)]
+pub struct Heading {
+    pub title: String,
+    pub year: usize,
 }
